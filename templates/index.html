@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>排程计算工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 700px;
+            width: 100%;
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .form-group {
+            margin-bottom: 25px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+            font-size: 15px;
+        }
+        
+        .file-input-wrapper {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+        
+        .file-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+        
+        .file-input:hover {
+            border-color: #667eea;
+            background: #f0f0ff;
+        }
+        
+        .file-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .file-name {
+            margin-top: 8px;
+            color: #666;
+            font-size: 13px;
+            font-style: italic;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        
+        .alert-error {
+            background: #fee;
+            color: #c33;
+            border: 1px solid #fcc;
+        }
+        
+        .alert-success {
+            background: #efe;
+            color: #3c3;
+            border: 1px solid #cfc;
+        }
+        
+        .info-box {
+            background: #f0f7ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 25px;
+            font-size: 13px;
+            color: #555;
+        }
+        
+        .info-box strong {
+            color: #667eea;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+        
+        .loading.active {
+            display: block;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .step-indicator {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            color: #666;
+        }
+        
+        .step-indicator strong {
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>排程计算工具</h1>
+        <p class="subtitle">上传Excel文件，自动执行合并需求和排程计算</p>
+        
+        <div class="step-indicator">
+            <strong>处理流程：</strong> 合并需求 → 排程计算 → 下载结果
+        </div>
+        
+        <div class="info-box">
+            <strong>使用说明：</strong><br>
+            1. 第一个文件：需求及库存更新.xlsx（需包含：客户需求、成品、超需求库存、半品 四个Sheet）<br>
+            2. 第二个文件：BOM及物料更新.xlsx（需包含：成品与半成品对照表 Sheet）<br>
+            3. 点击"开始计算"后，系统会自动执行合并需求和排程计算，完成后自动下载结果文件
+        </div>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'error' if category == 'error' else 'success' }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <form action="/calculate" method="post" enctype="multipart/form-data" id="calcForm">
+            <div class="form-group">
+                <label for="file1">需求及库存更新文件 (.xlsx)</label>
+                <div class="file-input-wrapper">
+                    <input type="file" 
+                           id="file1" 
+                           name="file1" 
+                           accept=".xlsx,.xls" 
+                           required 
+                           class="file-input"
+                           onchange="updateFileName('file1', 'fileName1')">
+                    <div id="fileName1" class="file-name"></div>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="file2">BOM及物料更新文件 (.xlsx)</label>
+                <div class="file-input-wrapper">
+                    <input type="file" 
+                           id="file2" 
+                           name="file2" 
+                           accept=".xlsx,.xls" 
+                           required 
+                           class="file-input"
+                           onchange="updateFileName('file2', 'fileName2')">
+                    <div id="fileName2" class="file-name"></div>
+                </div>
+            </div>
+            
+            <button type="submit" class="btn" id="submitBtn">开始计算</button>
+        </form>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>正在处理，请稍候...</p>
+        </div>
+    </div>
+    
+    <script>
+        function updateFileName(inputId, displayId) {
+            const input = document.getElementById(inputId);
+            const display = document.getElementById(displayId);
+            if (input.files && input.files[0]) {
+                display.textContent = '已选择: ' + input.files[0].name;
+            } else {
+                display.textContent = '';
+            }
+        }
+        
+        function resetForm() {
+            const submitBtn = document.getElementById('submitBtn');
+            const loading = document.getElementById('loading');
+            const form = document.getElementById('calcForm');
+            
+            submitBtn.disabled = false;
+            submitBtn.textContent = '开始计算';
+            loading.classList.remove('active');
+            form.reset();
+            document.getElementById('fileName1').textContent = '';
+            document.getElementById('fileName2').textContent = '';
+        }
+        
+        document.getElementById('calcForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const loading = document.getElementById('loading');
+            const form = document.getElementById('calcForm');
+            const formData = new FormData(form);
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = '计算中...';
+            loading.classList.add('active');
+            
+            // 清除之前的错误消息
+            const alerts = document.querySelectorAll('.alert');
+            alerts.forEach(alert => alert.remove());
+            
+            fetch('/calculate', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(async response => {
+                const contentType = response.headers.get('content-type');
+                
+                // 检查是否是JSON错误响应
+                if (contentType && contentType.includes('application/json')) {
+                    const data = await response.json();
+                    throw new Error(data.error || '处理失败');
+                }
+                
+                // 检查HTTP状态码
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(text || '服务器错误');
+                }
+                
+                // 获取文件名
+                const contentDisposition = response.headers.get('Content-Disposition');
+                let filename = '排程结果.xlsx';
+                if (contentDisposition) {
+                    const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                    if (filenameMatch && filenameMatch[1]) {
+                        filename = decodeURIComponent(filenameMatch[1].replace(/['"]/g, ''));
+                    }
+                }
+                
+                // 下载文件
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                // 下载完成后重置表单
+                setTimeout(() => {
+                    resetForm();
+                    // 显示成功消息
+                    const successMsg = document.createElement('div');
+                    successMsg.className = 'alert alert-success';
+                    successMsg.textContent = '计算完成！文件已下载。';
+                    form.parentNode.insertBefore(successMsg, form);
+                    // 3秒后移除成功消息
+                    setTimeout(() => successMsg.remove(), 3000);
+                }, 500);
+            })
+            .catch(error => {
+                resetForm();
+                // 显示错误消息
+                const errorMsg = document.createElement('div');
+                errorMsg.className = 'alert alert-error';
+                errorMsg.textContent = '处理失败：' + (error.message || '未知错误');
+                form.parentNode.insertBefore(errorMsg, form);
+            });
+        });
+    </script>
+</body>
+</html>
+
