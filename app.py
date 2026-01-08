@@ -10,7 +10,7 @@ from werkzeug.utils import secure_filename
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'  # 用于flash消息
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 最大50MB
+app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024  # 最大30MB（避免内存问题）
 
 # 确保上传文件夹存在
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -32,8 +32,8 @@ def merge_requirements(r_and_s_path):
     (success, message, merged_file_path)
     """
     try:
-        # 读取数据（合并需求只需要客户需求表）
-        require = pd.read_excel(r_and_s_path, sheet_name='客户需求')
+        # 读取数据（合并需求只需要客户需求表，使用engine='openpyxl'明确指定）
+        require = pd.read_excel(r_and_s_path, sheet_name='客户需求', engine='openpyxl')
         
         file_length = len(require)
         
@@ -77,8 +77,8 @@ def merge_requirements(r_and_s_path):
         # 生成合并需求文件名
         merged_file_path = os.path.join('temp', '合并需求' + datetime.datetime.now().strftime('%m-%d') + '_' + str(uuid.uuid4())[:8] + '.xlsx')
         
-        with pd.ExcelWriter(merged_file_path) as writer:
-            df_total.to_excel(writer, '客户需求', index=False)
+        with pd.ExcelWriter(merged_file_path, engine='openpyxl') as writer:
+            df_total.to_excel(writer, sheet_name='客户需求', index=False)
         
         return True, "合并需求完成！", merged_file_path
         
@@ -99,12 +99,12 @@ def calculate_schedule(r_and_s_path, c_to_b_workbook_path, merged_file_path):
     (success, message, output_path)
     """
     try:
-        # 读取数据
-        require = pd.read_excel(merged_file_path, sheet_name='客户需求')
-        storage_c = pd.read_excel(r_and_s_path, sheet_name='成品')
-        storage_extra = pd.read_excel(r_and_s_path, sheet_name='超需求库存')
-        storage_b = pd.read_excel(r_and_s_path, sheet_name='半品')
-        c_to_b_sheet = pd.read_excel(c_to_b_workbook_path, sheet_name='成品与半成品对照表')
+        # 读取数据（使用engine='openpyxl'明确指定，提高性能）
+        require = pd.read_excel(merged_file_path, sheet_name='客户需求', engine='openpyxl')
+        storage_c = pd.read_excel(r_and_s_path, sheet_name='成品', engine='openpyxl')
+        storage_extra = pd.read_excel(r_and_s_path, sheet_name='超需求库存', engine='openpyxl')
+        storage_b = pd.read_excel(r_and_s_path, sheet_name='半品', engine='openpyxl')
+        c_to_b_sheet = pd.read_excel(c_to_b_workbook_path, sheet_name='成品与半成品对照表', engine='openpyxl')
         
         # 构建成品与半成品对照字典
         file_length = len(c_to_b_sheet)
@@ -265,11 +265,11 @@ def calculate_schedule(r_and_s_path, c_to_b_workbook_path, merged_file_path):
         # 生成输出文件名
         output_path = os.path.join('temp', '排程结果' + datetime.datetime.now().strftime('%m-%d') + '_' + str(uuid.uuid4())[:8] + '.xlsx')
         
-        with pd.ExcelWriter(output_path) as writer:
-            df_c.to_excel(writer, '成品需求', index=False)
-            df_cb.to_excel(writer, '库存半品出货需求', index=False)
-            df_eb.to_excel(writer, '外仓半品出货需求', index=False)
-            df_b.to_excel(writer, '半品生产需求', index=False)
+        with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+            df_c.to_excel(writer, sheet_name='成品需求', index=False)
+            df_cb.to_excel(writer, sheet_name='库存半品出货需求', index=False)
+            df_eb.to_excel(writer, sheet_name='外仓半品出货需求', index=False)
+            df_b.to_excel(writer, sheet_name='半品生产需求', index=False)
         
         return True, "计算完成！", output_path
         
@@ -308,6 +308,23 @@ def calculate():
         
         if not (allowed_file(file1.filename) and allowed_file(file2.filename)):
             error_msg = '只支持Excel文件（.xlsx, .xls）！'
+            if is_ajax:
+                return jsonify({'success': False, 'error': error_msg}), 400
+            flash(error_msg, 'error')
+            return redirect(url_for('index'))
+        
+        # 检查文件大小（限制为30MB，避免内存问题）
+        file1.seek(0, os.SEEK_END)
+        file1_size = file1.tell()
+        file1.seek(0)
+        
+        file2.seek(0, os.SEEK_END)
+        file2_size = file2.tell()
+        file2.seek(0)
+        
+        max_size = 30 * 1024 * 1024  # 30MB
+        if file1_size > max_size or file2_size > max_size:
+            error_msg = '文件大小不能超过30MB！'
             if is_ajax:
                 return jsonify({'success': False, 'error': error_msg}), 400
             flash(error_msg, 'error')
